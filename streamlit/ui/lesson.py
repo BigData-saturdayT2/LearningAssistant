@@ -55,6 +55,28 @@ def main():
     # Display detailed explanation as an article
     detailed_explanation = module_details.get("detailed_explanation", "No detailed explanation available.")
     st.markdown("### Detailed Explanation")
+    try:
+        st.markdown("### Related Images")
+        image_response = requests.get(
+            f"{FASTAPI_URL}/get_image_urls_by_module/{selected_module_id}",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        if image_response.status_code == 200:
+            image_data = image_response.json()
+            if "image_urls" in image_data:
+                image_urls = image_data["image_urls"]
+                if image_urls:
+                    for url in image_urls:
+                        st.image(url, caption=url, use_column_width=True)
+                else:
+                    st.info("No related images found for this module.")
+            else:
+                st.error("Unexpected response format for image data.")
+        else:
+            st.error("Failed to retrieve images for this module.")
+    except Exception as e:
+        st.error(f"An error occurred while fetching images: {e}")
+        
     paragraphs = detailed_explanation.split("\n\n")  # Split into paragraphs by double line breaks
     for paragraph in paragraphs:
         st.markdown(paragraph.strip())  # Render each paragraph as Markdown with proper spacing

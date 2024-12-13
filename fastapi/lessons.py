@@ -5,12 +5,16 @@ from googleapiclient.discovery import build
 from pydantic import BaseModel
 from typing import Optional, List
 import logging
+from pinecone import Pinecone, ServerlessSpec
+from transformers import CLIPProcessor, CLIPModel
+import torch
 from syllabus import get_embedding
 from config import (
     client,
     youtube,
     index,
     youtube_index,
+    index
 )
 
 # Configure logging
@@ -122,7 +126,6 @@ def fetch_youtube_videos(query: str, max_results: int = 3) -> List[dict]:
         raise HTTPException(status_code=500, detail=f"Error fetching YouTube videos: {str(e)}")
 
 # Fetch video transcript
-
 def fetch_video_transcript(video_id: str) -> Optional[str]:
     try:
         logger.info("Fetching transcript for video ID: %s", video_id)
@@ -167,3 +170,41 @@ def upsert_to_pinecone(video_id: str, title: str, description: str, transcript_c
             ])
     except Exception as e:
         logger.error(f"Error upserting to Pinecone for video {video_id}: {str(e)}")
+
+#---------image logic -------
+# Generate embedding for the query text using CLIP
+def generate_text_embedding(query_text: str, model: CLIPModel, processor: CLIPProcessor):
+    """
+    Generate embeddings for the query text using the CLIP model.
+    """
+    inputs = processor(text=query_text, return_tensors="pt")
+    with torch.no_grad():
+        embedding = model.get_text_features(**inputs).numpy().flatten()
+    return embedding
+
+# Query Pinecone and retrieve metadata
+def retrieve_from_image_index(query_text: str):
+    """
+    Query the Pinecone image index and retrieve metadata based on the text embedding.
+    """
+    try:
+        # Load CLIP model and processor
+        model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+        # Generate query embedding
+        query_embedding = generate_text_embedding(query_text, model, processor)
+
+        # Query the Pinecone image index
+        results = index.query(
+            vector=query_embedding.tolist(),
+            top_k=5,
+            include_metadata=True
+        )
+
+        # Extract URLs from the results
+        image_urls = [result['metadata']['url'] for result in results['matches'] if 'url' in result['metadata']]
+
+        return image_urls
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error querying image index: {str(e)}")

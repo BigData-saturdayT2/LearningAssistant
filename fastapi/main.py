@@ -16,6 +16,7 @@ from lessons import (
     summarize_text,
     generate_embedding,
     chunk_text,
+    retrieve_from_image_index
 )
 from utils import (
     get_password_hash,
@@ -53,6 +54,8 @@ from config import (
     youtube,
     index,
     youtube_index,
+    IMAGE_INDEX,
+    IMAGE_DIM
 )
 import logging
 import json
@@ -509,6 +512,56 @@ async def get_relevant_youtube_video(module_id: str, cached_data: dict = Depends
 
 logging.basicConfig(level=logging.DEBUG)  # Set the level to DEBUG or INFO
 logger = logging.getLogger(__name__)
+
+@app.get("/get_image_urls_by_module/{module_id}")
+def get_image_urls_by_module(module_id: str):
+    """
+    Retrieve image URLs based on the module ID.
+    """
+    connection = get_db_connection()
+    try:
+        # Step 1: Retrieve module details from the database
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT MODULE_ID, MODULE, TITLE, DESCRIPTION FROM MODULES WHERE MODULE_ID = %s",
+            (module_id,)
+        )
+        module = cursor.fetchone()
+
+        if not module:
+            return {"message": f"No details found for module ID: {module_id}"}
+
+        title, description = module[2], module[3]
+
+        # Step 2: Construct query text using title and description
+        query_text = f"{title}. {description}"
+
+        # Step 3: Retrieve image URLs from Pinecone
+        image_urls = retrieve_from_image_index(query_text)
+
+        # Step 4: Format response
+        if not image_urls:
+            return {
+                "module_id": module_id,
+                "module": module[1],
+                "title": title,
+                "description": description,
+                "image_urls": [],
+                "message": "No matching images found."
+            }
+
+        return {
+            "module_id": module_id,
+            "module": module[1],
+            "title": title,
+            "description": description,
+            "image_urls": image_urls
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing module ID: {str(e)}")
+    finally:
+        cursor.close()
+        connection.close()
 
 
 @app.get("/generate_flashcards/{module_id}", response_model=FlashcardGeneration)

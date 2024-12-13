@@ -6,6 +6,8 @@ from queue import Queue
 import snowflake.connector
 from openai import OpenAI
 
+
+
 load_dotenv()
 
 # Configure logging
@@ -24,6 +26,8 @@ DIMENSION = os.getenv("DIMENSION")
 METRIC = os.getenv("METRIC")
 CLOUD_PROVIDER = os.getenv("CLOUD_PROVIDER")
 REGION = os.getenv("REGION")
+IMAGE_INDEX= os.getenv("IMG_INDEX_NAME")
+IMAGE_DIM= os.getenv("IMAGE_DIMENSIONS")
 
 # Initialize OpenAI
 from openai import OpenAI
@@ -54,6 +58,17 @@ if YOUTUBE_INDEX not in existing_indexes:
     pc.create_index(
         name=YOUTUBE_INDEX,
         dimension=DIMENSION,  # Same dimension as embeddings
+        metric=METRIC,
+        spec=ServerlessSpec(cloud=CLOUD_PROVIDER, region=REGION),
+    )
+
+youtube_index = pc.Index(YOUTUBE_INDEX)
+
+if IMAGE_INDEX not in existing_indexes:
+    # Create the YouTube index if it doesn't exist
+    pc.create_index(
+        name=IMAGE_INDEX,
+        dimension=IMAGE_DIM,  # Same dimension as embeddings
         metric=METRIC,
         spec=ServerlessSpec(cloud=CLOUD_PROVIDER, region=REGION),
     )
